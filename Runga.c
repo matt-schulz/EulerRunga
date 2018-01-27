@@ -1,85 +1,79 @@
 #include <stdio.h>
 #include <math.h>
 
-double t0 = 0, tf = 100, dt = 0.01, xint = 1, vint = 0, accuracy, accel, accelt;
-double PEapp, KEapp, PEexa, KEexa, Eapp, Eexa;
-double k = 4, m = 3, w;
-double y[2];
-double yt[2];
-double yexact[2];
-int ndim = sizeof(y);
+int ndim = 2;
+double t0 = 0, tf = 10, dt = 0.1, accuracy;
+double x0 = 1, v0 = 0;
+double k = 4, m = 1, w;
+double y[2], yexact[2], dydx[2];
+double Eapp[3], Eexa[3];
 double  t;
 
-void Dydx(double, double [], double []);
-void Step(double, double [], double [], int, double,
-    void (*derivs)(double, double [], double []));
-void Runga(double [], double [], double, double);
-void accelerator(double*, double*, double [], double []);
+void Dydx(double [], double []);
+void Step(double, double [], int, double, double [],
+	void(*derivs)(double [], double []));
 void functio(double [], double);
-void energy(double*, double*, double*, double*, double*, double*, double [], double []);
+void energy(double [], double [], double [], double []);
 double absval(double);
 
 int main(){
 	t = t0;
 	w = pow((k/m),0.5);
-	y[0] = xint;
-	y[1] = vint;
+	y[0] = x0;
+	y[1] = v0;
 	functio(yexact,t);
-	Runga(y,yt,dt,accel);
-	accelerator(&accel,&accelt,y,yt);
 	FILE *printer;
 	printer = fopen("Runga.txt", "w");
+	printf("(t,ycalc):(%f,%f), yex = %f, accuracy = %f\n",t, y[0], yexact[0], accuracy);
+	fprintf(printer, "%f\t%f\t%f\t%f\t%f\n",t, y[0], y[1], yexact[0], yexact[1]);
 	
-	while(t <= tf){
-		energy(&PEapp,&KEapp,&PEexa,&KEexa,&Eapp,&Eexa,y,yexact);
-		accuracy = (1-absval(1-absval(Eapp/Eexa)))*100;
-		printf("(t,ycalc):(%f,%f), yex = %f, accuracy = %f\n",t, y[0], yexact[0], accuracy);
-		fprintf(printer, "%f\t%f\t%f\t%f\t%f\t%f\n",t, y[0], y[1], yexact[0], yexact[1], accuracy);
+	while(t < tf){
+		Step(t,y,ndim,dt,dydx,Dydx);
 		t += dt;
-		Runga(y,yt,dt,accel);
-		accelerator(&accel,&accelt,y,yt);
-		Step(t,y,yt,ndim,dt,Dydx);
 		functio(yexact,t);
+		energy(Eapp,Eexa,y,yexact);
+		accuracy = (1-absval(1-absval(Eapp[2]/Eexa[2])))*100;
+		printf("(t,ycalc):(%f,%f), yex = %f, accuracy = %f\n",t, y[0], yexact[0], accuracy);
+		fprintf(printer, "%f\t%f\t%f\t%f\t%f\n",t, y[0], y[1], yexact[0], yexact[1]);
 	}
 	fclose(printer);
 	return 0;
 }
 
-void accelerator(double* accel, double* accelt, double y[], double yt[]){
-	*accel = (-1)*(pow(w,2))*y[0];
-	*accelt = (-1)*(pow(w,2))*yt[0];
+void Dydx(double y[], double dydx[]){
+	double a, yt0, yt1, at;
+	//Calculate the acceleration at t = t
+	a = (-1)*(pow(w,2))*y[0];
+	//Calculate Runga-Kutta Intermediates (t = t + dt/2)
+	yt0 = y[0]+((dt/2)*y[1]);
+	yt1 = y[1]+((dt/2)*a);
+	//Calculate dv/dt for Runga-Kutta (acceleration)
+	at = (-1)*(pow(w,2))*yt0;
+	//Set corresponding Runga-Kutta intermediates into dydx array
+	dydx[0] = yt1;
+	dydx[1] = at;
+}
+
+void Step(double t, double y[], int ndim, double dt, double dydx[],
+	void(*derivs)(double [], double [])){
+	//Compute final Runga-Kutta step
+	int j;
+	(*derivs)(y,dydx);
+	for(j = 0 ; j < ndim ; j++) y[j] += dydx[j]*dt ;
 }
 
 void functio(double yexact[], double t){
-	yexact[0] = cos(w*t);
-	yexact[1] = (-1)*w*sin(w*t);
+	yexact[0] = x0*cos(w*t);
+	yexact[1] = (-1)*x0*w*sin(w*t);
 }
 
-void Runga(double y[], double yt[], double dt, double accel){
-	yt[0] = y[0]+((dt/2)*y[1]);
-	yt[1] = y[1]+((dt/2)*accel);
-}
-
-void Dydx(double x, double yt[],double dydx[]){
-	int j ;
-	dydx[0] = yt[1] ;
-	dydx[1] = accelt ;
-}
-
-void energy(double* PEapp, double* KEapp, double* PEexa, double* KEexa, double* Eapp, double* Eexa, double y[], double yexact[]){
-		*PEapp = (0.5)*k*(pow(y[0],2));
-		*KEapp = (0.5)*m*(pow(y[1],2));
-		*PEexa = (0.5)*k*(pow(yexact[0],2));
-		*KEexa = (0.5)*m*(pow(yexact[1],2));
-		*Eapp = *PEapp+*KEapp;
-		*Eexa = *PEexa+*KEexa;
-}
-
-void Step(double x, double y[], double dydx[], int n, double dx,
-	void (*derivs)(double, double [], double [])){
-		int j ;
-		(*derivs)(x,y,dydx) ;
-		for(j = 0 ; j < n ; j++) y[j] += dydx[j]*dx ;
+void energy(double Eapp [], double Eexa [], double y[], double yexact[]){
+	Eapp[0] = (0.5)*k*(pow(y[0],2));
+	Eapp[1] = (0.5)*m*(pow(y[1],2));
+	Eexa[0] = (0.5)*k*(pow(yexact[0],2));
+	Eexa[1] = (0.5)*m*(pow(yexact[1],2));
+	Eapp[2] = Eapp[0]+Eapp[1];
+	Eexa[2] = Eexa[0]+Eexa[1];
 }
 
 double absval(double input){
