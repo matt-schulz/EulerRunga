@@ -36,8 +36,9 @@ double absval(double);
 int main(){
 	t = t0; //initializes the time
 	w = pow((k/m),0.5); //defines omega
-	y[0] = x0; //intializes x
-	y[1] = v0; //intializes v
+	y[0] = x0; //initializes x
+	y[1] = v0; //initializes v
+	energy(Eapp,Eexa,y,yexact); //initializes energy
 	functio(yexact,t); //calculates the exact values which the program is trying to model
 	accuracy = (1-absval(1-absval(Eapp[2]/Eexa[2])))*100; //calculates initial accuracy
 	FILE *printer;
